@@ -1,78 +1,87 @@
-const express = require("express");
+const express = require('express');
+const mongoose = require('mongoose');
+const graphql = require('graphql');
+const { graphqlHTTP } = require('express-graphql');
+const { GraphQLObjectType, GraphQLSchema, GraphQLList, GraphQLID, GraphQLInt, GraphQLString } = graphql;
+const User = require('./models/User'); // Import the User model
+
 const app = express();
 const PORT = 5000;
-const userData = require("./MOCK_DATA.json");
-const graphql = require("graphql")
-const { GraphQLObjectType, GraphQLSchema, GraphQLList, GraphQLID, GraphQLInt, GraphQLString } = graphql
-const { graphqlHTTP } = require("express-graphql")
+
+// MongoDB Atlas connection string
+const dbPassword = encodeURIComponent(process.env.MONGO_PASSWORD.trim()) 
+const dbURL = `mongodb+srv://adminPersonnnel:${dbPassword}@devcluster.grn9xzq.mongodb.net/?retryWrites=true&w=majority&appName=DevCluster`;
+
+mongoose.connect(dbURL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => {
+    console.log('MongoDB connected...');
+}).catch(err => {
+    console.error('MongoDB connection error:', err);
+});
 
 const UserType = new GraphQLObjectType({
     name: "User",
     fields: () => ({
-        id: { type: GraphQLInt },
+        id: { type: GraphQLID },
         firstName: { type: GraphQLString },
         lastName: { type: GraphQLString },
         email: { type: GraphQLString },
         password: { type: GraphQLString },
     })
-})
+});
 
 const RootQuery = new GraphQLObjectType({
     name: "RootQueryType",
     fields: {
         getAllUsers: {
             type: new GraphQLList(UserType),
-            args: { id: {type: GraphQLInt}},
-            resolve(parent, args) {
-                return userData;
+            resolve() {
+                return User.find();
             }
         },
         findUserById: {
             type: UserType,
-            description: "fetch single user",
-            args: { id: {type: GraphQLInt}},
+            args: { id: { type: GraphQLID } },
             resolve(parent, args) {
-                return userData.find((a) => a.id == args.id);
+                return User.findById(args.id);
             }
         }
     }
-})
+});
+
 const Mutation = new GraphQLObjectType({
     name: "Mutation",
     fields: {
         createUser: {
             type: UserType,
             args: {
-                firstName: {type: GraphQLString},
+                firstName: { type: GraphQLString },
                 lastName: { type: GraphQLString },
                 email: { type: GraphQLString },
-                password: { type: GraphQLString },
+                password: { type: GraphQLString }
             },
             resolve(parent, args) {
-                userData.push({
-                    id: userData.length + 1,
+                const user = new User({
                     firstName: args.firstName,
                     lastName: args.lastName,
                     email: args.email,
                     password: args.password
-                })
-                return args
+                });
+                return user.save();
             }
         }
     }
-})
+});
 
-const schema = new GraphQLSchema({query: RootQuery, mutation: Mutation})
-app.use("/graphql", graphqlHTTP({
+const schema = new GraphQLSchema({ query: RootQuery, mutation: Mutation });
+
+app.use('/graphql', graphqlHTTP({
     schema,
     graphiql: true,
-  })
-);
-
-app.get("/rest/getAllUsers", (req, res) => {
-    res.send(userData)
-   });
+}));
 
 app.listen(PORT, () => {
-  console.log("Server running");
+    console.log(`Server running on port ${PORT}`);
 });
